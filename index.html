@@ -38,6 +38,22 @@
         }
         h1 { margin: 0 0 5px 0; font-size: 18px; color: #00ffcc; text-transform: uppercase; }
         p { margin: 0; font-size: 12px; color: #aaa; }
+        #pause-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.75);
+            color: #00ffcc;
+            border: 1px solid #00ffcc;
+            border-radius: 6px;
+            padding: 10px 18px;
+            font-family: monospace;
+            font-size: 12px;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        #pause-btn:hover { background: rgba(0, 255, 204, 0.15); }
         #legend-box {
             position: absolute;
             bottom: 20px;
@@ -136,6 +152,8 @@
         <h1>Paradigm Cyber Threat Map</h1>
         <p id="status-line">Status: Connecting to live feed&hellip;</p>
     </div>
+
+    <button id="pause-btn" type="button">Pause</button>
 
     <div id="legend-box">
         <div class="legend-title">Legend</div>
@@ -300,7 +318,7 @@
         }
 
         pollThreatFeed();
-        setInterval(pollThreatFeed, 45000); // respect SANS ISC's refresh rate — don't hammer it
+        let sansIntervalId = setInterval(pollThreatFeed, 45000); // respect SANS ISC's refresh rate — don't hammer it
 
         // 4. BOTNET C2 FEED (abuse.ch Feodo Tracker)
         // Fetched server-side by a scheduled GitHub Action into data/feodo.json
@@ -336,7 +354,31 @@
         }
 
         pollBotnetFeed();
-        setInterval(pollBotnetFeed, 60000);
+        let feodoIntervalId = setInterval(pollBotnetFeed, 60000);
+
+        // 5. PAUSE / RESUME (for classroom use — freeze the globe and feeds
+        // while discussing what's currently on screen)
+        const pauseBtn = document.getElementById('pause-btn');
+        let isPaused = false;
+
+        pauseBtn.addEventListener('click', () => {
+            if (isPaused) {
+                isPaused = false;
+                world.controls().autoRotate = true;
+                pollThreatFeed();
+                pollBotnetFeed();
+                sansIntervalId = setInterval(pollThreatFeed, 45000);
+                feodoIntervalId = setInterval(pollBotnetFeed, 60000);
+                pauseBtn.textContent = 'Pause';
+            } else {
+                isPaused = true;
+                world.controls().autoRotate = false;
+                clearInterval(sansIntervalId);
+                clearInterval(feodoIntervalId);
+                pauseBtn.textContent = 'Resume';
+                statusEl.textContent = 'Status: Paused';
+            }
+        });
     </script>
 </body>
 </html>

@@ -1,0 +1,31 @@
+name: Update Feodo Tracker feed
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-feed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download latest Feodo Tracker snapshot
+        run: |
+          curl -sf "https://feodotracker.abuse.ch/downloads/ipblocklist.json" -o data/feodo.json
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- data/feodo.json; then
+            git add data/feodo.json
+            git commit -m "Update Feodo Tracker snapshot"
+            git push
+          else
+            echo "No changes to feed data"
+          fi

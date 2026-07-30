@@ -72,6 +72,7 @@
             flex-shrink: 0;
         }
         .swatch-real { background: linear-gradient(90deg, #ff0055, #00ffcc); }
+        .swatch-botnet { background: linear-gradient(90deg, #ffaa00, #aa00ff); }
         .swatch-sim { background: linear-gradient(90deg, #666, #999); }
         #legend-box .legend-note {
             margin-top: 6px;
@@ -138,7 +139,8 @@
 
     <div id="legend-box">
         <div class="legend-title">Legend</div>
-        <div class="legend-item"><span class="swatch swatch-real"></span> Real reported attacker IP (SANS ISC / DShield)</div>
+        <div class="legend-item"><span class="swatch swatch-real"></span> Reported scanning source (SANS ISC / DShield)</div>
+        <div class="legend-item"><span class="swatch swatch-botnet"></span> Botnet C2 infrastructure (abuse.ch Feodo Tracker)</div>
         <div class="legend-item"><span class="swatch swatch-sim"></span> Simulated data (shown only if live feed is unreachable)</div>
         <div class="legend-note">Destination point is illustrative only — it does not represent a real attacked target.</div>
     </div>
@@ -164,12 +166,12 @@
             .height(window.innerHeight)
             .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg')
             .bumpImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png')
-            .arcColor(d => d.simulated ? ['#666', '#999'] : ['#ff0055', '#00ffcc'])
+            .arcColor(d => d.simulated ? ['#666', '#999'] : d.source === 'feodo' ? ['#ffaa00', '#aa00ff'] : ['#ff0055', '#00ffcc'])
             .arcDashLength(0.4)
             .arcDashGap(0.2)
             .arcDashAnimateTime(1500)
             .arcStroke(1.2)
-            .arcLabel(d => `${d.ip ? d.ip + '<br>' : ''}${d.country ? d.country : 'Unknown origin'}`);
+            .arcLabel(d => `${d.ip ? d.ip + '<br>' : ''}${d.country || 'Unknown origin'}${d.malware ? ' — ' + d.malware + ' C2' : ''}`);
 
         window.addEventListener('resize', () => {
             world.width(window.innerWidth).height(window.innerHeight);
@@ -201,7 +203,7 @@
                 <tr class="${entry.simulated ? 'sim-row' : ''}">
                     <td class="log-time">${entry.time}</td>
                     <td class="log-ip">${entry.ip || '—'}</td>
-                    <td class="log-country">${entry.country || 'Unknown'}</td>
+                    <td class="log-country">${entry.country || 'Unknown'}${entry.malware ? ' (' + entry.malware + ')' : ''}</td>
                 </tr>
             `).join('');
         }
@@ -226,6 +228,7 @@
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
                 ip: meta.ip,
                 country: meta.country,
+                malware: meta.malware,
                 simulated: !!meta.simulated
             });
             if (attackLog.length > MAX_LOG_ROWS) attackLog.length = MAX_LOG_ROWS;
@@ -298,6 +301,42 @@
 
         pollThreatFeed();
         setInterval(pollThreatFeed, 45000); // respect SANS ISC's refresh rate — don't hammer it
+
+        // 4. BOTNET C2 FEED (abuse.ch Feodo Tracker)
+        // Fetched server-side by a scheduled GitHub Action into data/feodo.json
+        // (the live abuse.ch endpoint has no CORS support for browser fetches).
+        const MAX_NEW_PER_POLL_FEODO = 3;
+
+        async function pollBotnetFeed() {
+            try {
+                const res = await fetch('data/feodo.json', { cache: 'no-store' });
+                if (!res.ok) throw new Error(`Feodo snapshot returned ${res.status}`);
+                const records = await res.json();
+
+                let plotted = 0;
+                for (const rec of records) {
+                    if (plotted >= MAX_NEW_PER_POLL_FEODO) break;
+                    if (!rec.ip_address || seenIPs.has(rec.ip_address)) continue;
+                    seenIPs.add(rec.ip_address);
+
+                    const coords = await geolocateIP(rec.ip_address);
+                    if (!coords) continue;
+
+                    addAttack(coords.lat, coords.lng, SENSOR_POINT.lat, SENSOR_POINT.lng, {
+                        ip: rec.ip_address,
+                        country: coords.country,
+                        malware: rec.malware,
+                        source: 'feodo'
+                    });
+                    plotted++;
+                }
+            } catch (err) {
+                console.warn('Botnet C2 feed unavailable:', err);
+            }
+        }
+
+        pollBotnetFeed();
+        setInterval(pollBotnetFeed, 60000);
     </script>
 </body>
 </html>

@@ -365,6 +365,7 @@
             if (isPaused) {
                 isPaused = false;
                 world.controls().autoRotate = true;
+                world.resumeAnimation(); // resumes arc dash motion + ring propagation
                 pollThreatFeed();
                 pollBotnetFeed();
                 sansIntervalId = setInterval(pollThreatFeed, 45000);
@@ -373,6 +374,7 @@
             } else {
                 isPaused = true;
                 world.controls().autoRotate = false;
+                world.pauseAnimation(); // freezes arc dash motion + ring propagation in place
                 clearInterval(sansIntervalId);
                 clearInterval(feodoIntervalId);
                 pauseBtn.textContent = 'Resume';

@@ -157,10 +157,10 @@
 
     <div id="legend-box">
         <div class="legend-title">Legend</div>
-        <div class="legend-item"><span class="swatch swatch-real"></span> Reported scanning source (SANS ISC / DShield)</div>
+        <div class="legend-item"><span class="swatch swatch-real"></span> Reported attacker source (SANS ISC / CINS Army)</div>
         <div class="legend-item"><span class="swatch swatch-botnet"></span> Botnet C2 infrastructure (abuse.ch Feodo Tracker)</div>
         <div class="legend-item"><span class="swatch swatch-sim"></span> Simulated data (shown only if live feed is unreachable)</div>
-        <div class="legend-note">Destination point is illustrative only — it does not represent a real attacked target.</div>
+        <div class="legend-note">Destination points are illustrative only — they do not represent real attacked targets.</div>
     </div>
 
     <div id="log-box">
@@ -260,9 +260,20 @@
         }
 
         // 3. LIVE THREAT FEED
-        // Destination is a single fixed point representing the DShield sensor
-        // network in aggregate — it is NOT a real attack target.
-        const SENSOR_POINT = { lat: 38.9, lng: -77.0 };
+        // Destinations are illustrative points spread across continents —
+        // they are NOT real attack targets. Picking one at random per event
+        // avoids every arc visually converging on a single country.
+        const ILLUSTRATIVE_POINTS = [
+            { lat: 40, lng: -100 },  // North America
+            { lat: -15, lng: -60 },  // South America
+            { lat: 50, lng: 15 },    // Europe
+            { lat: 5, lng: 20 },     // Africa
+            { lat: 30, lng: 100 },   // Asia
+            { lat: -25, lng: 135 }   // Oceania
+        ];
+        function pickIllustrativePoint() {
+            return ILLUSTRATIVE_POINTS[Math.floor(Math.random() * ILLUSTRATIVE_POINTS.length)];
+        }
 
         const geoCache = new Map();   // ip -> {lat, lng, country} | null
         const seenIPs = new Set();
@@ -300,7 +311,8 @@
                     const coords = await geolocateIP(rec.ip);
                     if (!coords) continue;
 
-                    addAttack(coords.lat, coords.lng, SENSOR_POINT.lat, SENSOR_POINT.lng, {
+                    const dst = pickIllustrativePoint();
+                    addAttack(coords.lat, coords.lng, dst.lat, dst.lng, {
                         ip: rec.ip,
                         country: coords.country
                     });
@@ -340,7 +352,8 @@
                     const coords = await geolocateIP(rec.ip_address);
                     if (!coords) continue;
 
-                    addAttack(coords.lat, coords.lng, SENSOR_POINT.lat, SENSOR_POINT.lng, {
+                    const dst = pickIllustrativePoint();
+                    addAttack(coords.lat, coords.lng, dst.lat, dst.lng, {
                         ip: rec.ip_address,
                         country: coords.country,
                         malware: rec.malware,
@@ -356,7 +369,45 @@
         pollBotnetFeed();
         let feodoIntervalId = setInterval(pollBotnetFeed, 60000);
 
-        // 5. PAUSE / RESUME (for classroom use — freeze the globe and feeds
+        // 5. REPORTED ATTACKER FEED (CINS Army badguys list)
+        // Same category as SANS ISC (reported attacker IPs) — fetched
+        // server-side by a scheduled GitHub Action into data/cins.txt since
+        // the live cinsscore.com endpoint has no CORS support either.
+        const MAX_NEW_PER_POLL_CINS = 3;
+
+        async function pollCinsFeed() {
+            try {
+                const res = await fetch('data/cins.txt', { cache: 'no-store' });
+                if (!res.ok) throw new Error(`CINS snapshot returned ${res.status}`);
+                const text = await res.text();
+                const ips = text.split('\n').map(line => line.trim()).filter(Boolean);
+
+                let plotted = 0;
+                for (const ip of ips) {
+                    if (plotted >= MAX_NEW_PER_POLL_CINS) break;
+                    if (seenIPs.has(ip)) continue;
+                    seenIPs.add(ip);
+
+                    const coords = await geolocateIP(ip);
+                    if (!coords) continue;
+
+                    const dst = pickIllustrativePoint();
+                    addAttack(coords.lat, coords.lng, dst.lat, dst.lng, {
+                        ip: ip,
+                        country: coords.country,
+                        source: 'cins'
+                    });
+                    plotted++;
+                }
+            } catch (err) {
+                console.warn('CINS Army feed unavailable:', err);
+            }
+        }
+
+        pollCinsFeed();
+        let cinsIntervalId = setInterval(pollCinsFeed, 50000);
+
+        // 6. PAUSE / RESUME (for classroom use — freeze the globe and feeds
         // while discussing what's currently on screen)
         const pauseBtn = document.getElementById('pause-btn');
         let isPaused = false;
@@ -368,8 +419,10 @@
                 world.resumeAnimation(); // resumes arc dash motion + ring propagation
                 pollThreatFeed();
                 pollBotnetFeed();
+                pollCinsFeed();
                 sansIntervalId = setInterval(pollThreatFeed, 45000);
                 feodoIntervalId = setInterval(pollBotnetFeed, 60000);
+                cinsIntervalId = setInterval(pollCinsFeed, 50000);
                 pauseBtn.textContent = 'Pause';
             } else {
                 isPaused = true;
@@ -377,6 +430,7 @@
                 world.pauseAnimation(); // freezes arc dash motion + ring propagation in place
                 clearInterval(sansIntervalId);
                 clearInterval(feodoIntervalId);
+                clearInterval(cinsIntervalId);
                 pauseBtn.textContent = 'Resume';
                 statusEl.textContent = 'Status: Paused';
             }

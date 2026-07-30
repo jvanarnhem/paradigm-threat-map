@@ -1,8 +1,8 @@
-name: Update Feodo Tracker feed
+name: Update CINS Army feed
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '15,45 * * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -14,17 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download latest Feodo Tracker snapshot
+      - name: Download latest CINS Army snapshot
         run: |
-          curl -sf "https://feodotracker.abuse.ch/downloads/ipblocklist.json" -o data/feodo.json
+          curl -sf "https://cinsscore.com/list/ci-badguys.txt" -o data/cins.txt
 
       - name: Commit if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet -- data/feodo.json; then
-            git add data/feodo.json
-            git commit -m "Update Feodo Tracker snapshot"
+          if ! git diff --quiet -- data/cins.txt; then
+            git add data/cins.txt
+            git commit -m "Update CINS Army snapshot"
             git pull --rebase origin main
             git push
           else

@@ -229,7 +229,7 @@
 
             <h3>Not real</h3>
             <ul>
-                <li><strong>Destination points</strong> — none of these feeds report a real attacked target. Every arc's endpoint is chosen randomly from six fixed illustrative points, one per continent, purely so arcs don't all converge on one spot.</li>
+                <li><strong>Destination points</strong> — none of these feeds report a real attacked target. Each arc's endpoint is a real city, but picked at random, weighted by that country's approximate share of global internet users (published population statistics, not attack data), then randomized further among several cities within that country.</li>
                 <li><strong>Dimmed grey arcs</strong> — fully simulated placeholder data, shown only if the live SANS ISC feed can't be reached. Always marked separately in the legend and activity log.</li>
             </ul>
 
@@ -243,7 +243,7 @@
         <div class="legend-item"><span class="swatch swatch-real"></span> Reported attacker source (SANS ISC / CINS Army)</div>
         <div class="legend-item"><span class="swatch swatch-botnet"></span> Botnet C2 infrastructure (abuse.ch Feodo Tracker)</div>
         <div class="legend-item"><span class="swatch swatch-sim"></span> Simulated data (shown only if live feed is unreachable)</div>
-        <div class="legend-note">Destination points are illustrative only — they do not represent real attacked targets.</div>
+        <div class="legend-note">Destination points are illustrative only, weighted by real internet-population statistics — they do not represent real attacked targets.</div>
     </div>
 
     <div id="log-box">
@@ -272,7 +272,7 @@
             .arcDashGap(0.2)
             .arcDashAnimateTime(1500)
             .arcStroke(1.2)
-            .arcLabel(d => `${d.ip ? d.ip + '<br>' : ''}${d.country || 'Unknown origin'}${d.malware ? ' — ' + d.malware + ' C2' : ''}`);
+            .arcLabel(d => `${d.ip ? d.ip + '<br>' : ''}${d.country || 'Unknown origin'}${d.malware ? ' — ' + d.malware + ' C2' : ''}${d.destLabel ? '<br>→ ' + d.destLabel + ' (illustrative)' : ''}`);
 
         window.addEventListener('resize', () => {
             world.width(window.innerWidth).height(window.innerHeight);
@@ -343,19 +343,102 @@
         }
 
         // 3. LIVE THREAT FEED
-        // Destinations are illustrative points spread across continents —
-        // they are NOT real attack targets. Picking one at random per event
-        // avoids every arc visually converging on a single country.
-        const ILLUSTRATIVE_POINTS = [
-            { lat: 40, lng: -100 },  // North America
-            { lat: -15, lng: -60 },  // South America
-            { lat: 50, lng: 15 },    // Europe
-            { lat: 5, lng: 20 },     // Africa
-            { lat: 30, lng: 100 },   // Asia
-            { lat: -25, lng: 135 }   // Oceania
+        // Destinations are illustrative, NOT real attack targets — none of
+        // our feeds report a real destination. To spread them out more
+        // realistically than uniform-random, each country below is weighted
+        // by its approximate real share of global internet users (source:
+        // published internet-population estimates, e.g. DataReportal's
+        // "Digital" annual reports). Within a chosen country, one of several
+        // real major cities is picked at random, so destinations spread out
+        // within a country instead of hitting one fixed point every time.
+        const DESTINATION_POOL = [
+            { country: 'China', weight: 20, cities: [
+                { lat: 39.9, lng: 116.4, name: 'Beijing' },
+                { lat: 31.2, lng: 121.5, name: 'Shanghai' },
+                { lat: 23.1, lng: 113.3, name: 'Guangzhou' },
+                { lat: 30.6, lng: 104.1, name: 'Chengdu' }
+            ] },
+            { country: 'India', weight: 16, cities: [
+                { lat: 28.6, lng: 77.2, name: 'Delhi' },
+                { lat: 19.1, lng: 72.9, name: 'Mumbai' },
+                { lat: 12.9, lng: 77.6, name: 'Bengaluru' },
+                { lat: 22.6, lng: 88.4, name: 'Kolkata' }
+            ] },
+            { country: 'United States', weight: 8, cities: [
+                { lat: 40.7, lng: -74.0, name: 'New York' },
+                { lat: 34.1, lng: -118.2, name: 'Los Angeles' },
+                { lat: 41.9, lng: -87.6, name: 'Chicago' },
+                { lat: 32.8, lng: -96.8, name: 'Dallas' }
+            ] },
+            { country: 'Indonesia', weight: 6, cities: [
+                { lat: -6.2, lng: 106.8, name: 'Jakarta' },
+                { lat: -7.2, lng: 112.7, name: 'Surabaya' }
+            ] },
+            { country: 'Brazil', weight: 5, cities: [
+                { lat: -23.5, lng: -46.6, name: 'São Paulo' },
+                { lat: -22.9, lng: -43.2, name: 'Rio de Janeiro' },
+                { lat: -15.8, lng: -47.9, name: 'Brasília' }
+            ] },
+            { country: 'Nigeria', weight: 4, cities: [
+                { lat: 6.5, lng: 3.4, name: 'Lagos' },
+                { lat: 9.1, lng: 7.4, name: 'Abuja' }
+            ] },
+            { country: 'Russia', weight: 4, cities: [
+                { lat: 55.8, lng: 37.6, name: 'Moscow' },
+                { lat: 59.9, lng: 30.3, name: 'St. Petersburg' }
+            ] },
+            { country: 'Japan', weight: 4, cities: [
+                { lat: 35.7, lng: 139.7, name: 'Tokyo' },
+                { lat: 34.7, lng: 135.5, name: 'Osaka' }
+            ] },
+            { country: 'Bangladesh', weight: 3, cities: [
+                { lat: 23.8, lng: 90.4, name: 'Dhaka' }
+            ] },
+            { country: 'Mexico', weight: 3, cities: [
+                { lat: 19.4, lng: -99.1, name: 'Mexico City' },
+                { lat: 20.7, lng: -103.4, name: 'Guadalajara' }
+            ] },
+            { country: 'Germany', weight: 3, cities: [
+                { lat: 52.5, lng: 13.4, name: 'Berlin' },
+                { lat: 48.1, lng: 11.6, name: 'Munich' }
+            ] },
+            { country: 'Philippines', weight: 3, cities: [
+                { lat: 14.6, lng: 121.0, name: 'Manila' }
+            ] },
+            { country: 'Vietnam', weight: 3, cities: [
+                { lat: 21.0, lng: 105.8, name: 'Hanoi' },
+                { lat: 10.8, lng: 106.7, name: 'Ho Chi Minh City' }
+            ] },
+            { country: 'Egypt', weight: 3, cities: [
+                { lat: 30.0, lng: 31.2, name: 'Cairo' }
+            ] },
+            { country: 'United Kingdom', weight: 3, cities: [
+                { lat: 51.5, lng: -0.1, name: 'London' },
+                { lat: 53.5, lng: -2.2, name: 'Manchester' }
+            ] },
+            { country: 'France', weight: 3, cities: [
+                { lat: 48.9, lng: 2.4, name: 'Paris' }
+            ] },
+            { country: 'Turkey', weight: 3, cities: [
+                { lat: 41.0, lng: 28.9, name: 'Istanbul' }
+            ] },
+            { country: 'South Korea', weight: 2, cities: [
+                { lat: 37.6, lng: 127.0, name: 'Seoul' }
+            ] },
+            { country: 'South Africa', weight: 2, cities: [
+                { lat: -26.2, lng: 28.0, name: 'Johannesburg' }
+            ] },
+            { country: 'Australia', weight: 2, cities: [
+                { lat: -33.9, lng: 151.2, name: 'Sydney' }
+            ] }
         ];
+        const DESTINATION_TOTAL_WEIGHT = DESTINATION_POOL.reduce((sum, c) => sum + c.weight, 0);
+
         function pickIllustrativePoint() {
-            return ILLUSTRATIVE_POINTS[Math.floor(Math.random() * ILLUSTRATIVE_POINTS.length)];
+            let r = Math.random() * DESTINATION_TOTAL_WEIGHT;
+            const picked = DESTINATION_POOL.find(c => (r -= c.weight) < 0) || DESTINATION_POOL[DESTINATION_POOL.length - 1];
+            const city = picked.cities[Math.floor(Math.random() * picked.cities.length)];
+            return { lat: city.lat, lng: city.lng, label: `${city.name}, ${picked.country}` };
         }
 
         const geoCache = new Map();   // ip -> {lat, lng, country} | null
@@ -397,7 +480,8 @@
                     const dst = pickIllustrativePoint();
                     addAttack(coords.lat, coords.lng, dst.lat, dst.lng, {
                         ip: rec.ip,
-                        country: coords.country
+                        country: coords.country,
+                        destLabel: dst.label
                     });
                     plotted++;
                 }
@@ -440,7 +524,8 @@
                         ip: rec.ip_address,
                         country: coords.country,
                         malware: rec.malware,
-                        source: 'feodo'
+                        source: 'feodo',
+                        destLabel: dst.label
                     });
                     plotted++;
                 }
@@ -478,7 +563,8 @@
                     addAttack(coords.lat, coords.lng, dst.lat, dst.lng, {
                         ip: ip,
                         country: coords.country,
-                        source: 'cins'
+                        source: 'cins',
+                        destLabel: dst.label
                     });
                     plotted++;
                 }

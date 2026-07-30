@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paradigm Cyber Threat Map</title>
+    <!-- Load Globe.gl library via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
+    <style>
+        html, body {
+            height: 100%;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: monospace;
+            overflow: hidden;
+        }
+        #globeViz {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        #title-box {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 15px 20px;
+            border: 1px solid #00ffcc;
+            border-radius: 6px;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.3);
+        }
+        h1 { margin: 0 0 5px 0; font-size: 18px; color: #00ffcc; text-transform: uppercase; }
+        p { margin: 0; font-size: 12px; color: #aaa; }
+        #legend-box {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 12px 16px;
+            border: 1px solid #444;
+            border-radius: 6px;
+            font-size: 11px;
+            color: #ccc;
+            max-width: 320px;
+            line-height: 1.5;
+        }
+        #legend-box .legend-title {
+            color: #00ffcc;
+            text-transform: uppercase;
+            font-size: 11px;
+            margin-bottom: 6px;
+        }
+        #legend-box .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+        #legend-box .swatch {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .swatch-real { background: linear-gradient(90deg, #ff0055, #00ffcc); }
+        .swatch-sim { background: linear-gradient(90deg, #666, #999); }
+        #legend-box .legend-note {
+            margin-top: 6px;
+            color: #888;
+            font-style: italic;
+        }
+        #log-box {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 12px 16px;
+            border: 1px solid #444;
+            border-radius: 6px;
+            font-size: 11px;
+            color: #ccc;
+            width: 300px;
+        }
+        #log-box .legend-title {
+            color: #00ffcc;
+            text-transform: uppercase;
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+        #log-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        #log-table th {
+            text-align: left;
+            color: #666;
+            font-weight: normal;
+            font-size: 10px;
+            text-transform: uppercase;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #333;
+        }
+        #log-table td {
+            padding: 3px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #log-table tr.sim-row td { color: #777; font-style: italic; }
+        #log-table td.log-time { color: #666; width: 25%; }
+        #log-table td.log-ip { color: #00ffcc; width: 45%; }
+        #log-table td.log-country { width: 30%; }
+        #log-table tbody tr {
+            animation: log-fade-in 0.4s ease-out;
+        }
+        @keyframes log-fade-in {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="title-box">
+        <h1>Paradigm Cyber Threat Map</h1>
+        <p id="status-line">Status: Connecting to live feed&hellip;</p>
+    </div>
+
+    <div id="legend-box">
+        <div class="legend-title">Legend</div>
+        <div class="legend-item"><span class="swatch swatch-real"></span> Real reported attacker IP (SANS ISC / DShield)</div>
+        <div class="legend-item"><span class="swatch swatch-sim"></span> Simulated data (shown only if live feed is unreachable)</div>
+        <div class="legend-note">Destination point is illustrative only — it does not represent a real attacked target.</div>
+    </div>
+
+    <div id="log-box">
+        <div class="legend-title">Recent Activity</div>
+        <table id="log-table">
+            <thead>
+                <tr><th class="log-time">Time</th><th class="log-ip">Source IP</th><th class="log-country">Origin</th></tr>
+            </thead>
+            <tbody id="log-body"></tbody>
+        </table>
+    </div>
+
+    <!-- Container for the 3D Globe -->
+    <div id="globeViz"></div>
+
+    <script>
+        // 1. Initialize 3D Globe
+        const world = Globe()
+            (document.getElementById('globeViz'))
+            .width(window.innerWidth)
+            .height(window.innerHeight)
+            .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg')
+            .bumpImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png')
+            .arcColor(d => d.simulated ? ['#666', '#999'] : ['#ff0055', '#00ffcc'])
+            .arcDashLength(0.4)
+            .arcDashGap(0.2)
+            .arcDashAnimateTime(1500)
+            .arcStroke(1.2)
+            .arcLabel(d => `${d.ip ? d.ip + '<br>' : ''}${d.country ? d.country : 'Unknown origin'}`);
+
+        window.addEventListener('resize', () => {
+            world.width(window.innerWidth).height(window.innerHeight);
+        });
+
+        // Configure target rings (pings where attacks land)
+        world.ringColor(() => '#00ffcc')
+             .ringMaxRadius(6)
+             .ringPropagationSpeed(4)
+             .ringRepeatPeriod(800);
+
+        // Auto-rotate the Earth slowly
+        world.controls().autoRotate = true;
+        world.controls().autoRotateSpeed = 0.5;
+
+        const statusEl = document.getElementById('status-line');
+        const logBodyEl = document.getElementById('log-body');
+
+        // Data arrays to track active attacks
+        let arcsData = [];
+        let ringsData = [];
+
+        // Rolling log of the most recent attacks, newest first
+        const MAX_LOG_ROWS = 8;
+        let attackLog = [];
+
+        function renderLog() {
+            logBodyEl.innerHTML = attackLog.map(entry => `
+                <tr class="${entry.simulated ? 'sim-row' : ''}">
+                    <td class="log-time">${entry.time}</td>
+                    <td class="log-ip">${entry.ip || '—'}</td>
+                    <td class="log-country">${entry.country || 'Unknown'}</td>
+                </tr>
+            `).join('');
+        }
+
+        // 2. Function to plot a single attack event
+        function addAttack(srcLat, srcLng, dstLat, dstLng, meta = {}) {
+            const newArc = { startLat: srcLat, startLng: srcLng, endLat: dstLat, endLng: dstLng, ...meta };
+            const newRing = { lat: dstLat, lng: dstLng };
+
+            arcsData.push(newArc);
+            ringsData.push(newRing);
+
+            // Keep maximum 20 active arcs on screen to prevent lag
+            if (arcsData.length > 20) arcsData.shift();
+            if (ringsData.length > 20) ringsData.shift();
+
+            // Refresh globe layers
+            world.arcsData([...arcsData]).ringsData([...ringsData]);
+
+            // Push to the rolling activity log
+            attackLog.unshift({
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                ip: meta.ip,
+                country: meta.country,
+                simulated: !!meta.simulated
+            });
+            if (attackLog.length > MAX_LOG_ROWS) attackLog.length = MAX_LOG_ROWS;
+            renderLog();
+        }
+
+        function addSimulatedAttack() {
+            const randomLat = () => (Math.random() - 0.5) * 160;
+            const randomLng = () => (Math.random() - 0.5) * 360;
+            addAttack(randomLat(), randomLng(), randomLat(), randomLng(), { country: 'Simulated', simulated: true });
+        }
+
+        // 3. LIVE THREAT FEED
+        // Destination is a single fixed point representing the DShield sensor
+        // network in aggregate — it is NOT a real attack target.
+        const SENSOR_POINT = { lat: 38.9, lng: -77.0 };
+
+        const geoCache = new Map();   // ip -> {lat, lng, country} | null
+        const seenIPs = new Set();
+        const MAX_NEW_PER_POLL = 5;   // cap geolocation lookups per cycle
+
+        async function geolocateIP(ip) {
+            if (geoCache.has(ip)) return geoCache.get(ip);
+            try {
+                const res = await fetch(`https://ipwho.is/${ip}`);
+                const data = await res.json();
+                const coords = (data && data.success && typeof data.latitude === 'number')
+                    ? { lat: data.latitude, lng: data.longitude, country: data.country }
+                    : null;
+                geoCache.set(ip, coords);
+                return coords;
+            } catch (err) {
+                console.warn('Geolocation lookup failed for', ip, err);
+                geoCache.set(ip, null);
+                return null;
+            }
+        }
+
+        async function pollThreatFeed() {
+            try {
+                const res = await fetch('https://isc.sans.edu/api/sources/attacks/20?json');
+                if (!res.ok) throw new Error(`SANS ISC API returned ${res.status}`);
+                const records = await res.json();
+
+                let plotted = 0;
+                for (const rec of records) {
+                    if (plotted >= MAX_NEW_PER_POLL) break;
+                    if (!rec.ip || seenIPs.has(rec.ip)) continue;
+                    seenIPs.add(rec.ip);
+
+                    const coords = await geolocateIP(rec.ip);
+                    if (!coords) continue;
+
+                    addAttack(coords.lat, coords.lng, SENSOR_POINT.lat, SENSOR_POINT.lng, {
+                        ip: rec.ip,
+                        country: coords.country
+                    });
+                    plotted++;
+                }
+
+                if (seenIPs.size > 1000) seenIPs.clear(); // bound memory growth
+
+                statusEl.textContent = 'Status: Live feed connected (SANS ISC / DShield)';
+            } catch (err) {
+                console.error('Live threat feed unavailable, showing simulated data instead:', err);
+                statusEl.textContent = 'Status: Live feed unavailable — showing simulated data';
+                addSimulatedAttack();
+            }
+        }
+
+        pollThreatFeed();
+        setInterval(pollThreatFeed, 45000); // respect SANS ISC's refresh rate — don't hammer it
+    </script>
+</body>
+</html>
